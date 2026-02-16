@@ -5,6 +5,7 @@ import SwiftData
 
 struct LandingView: View {
     @Environment(\.modelContext) private var modelContext
+    @Query(sort: [SortDescriptor(\DailyStudyRecord.date)]) private var records: [DailyStudyRecord]
     enum FocusState {
         case idle
         case running
@@ -23,7 +24,7 @@ struct LandingView: View {
         case none = "None"
     }
 
-    @State private var goalDuration: Int = 2 * 60 * 60
+    @AppStorage("daily_goal_duration_seconds") private var goalDuration: Int = 2 * 60 * 60
     @State private var goalProgressSeconds: Int = 0
     @State private var selectedMood: Mood = .none
 
@@ -42,6 +43,7 @@ struct LandingView: View {
     @State private var alarmStopWorkItem: DispatchWorkItem?
     @State private var pendingStudySeconds: Int = 0
     @State private var pendingBreakSeconds: Int = 0
+    @State private var pendingSessionsCount: Int = 0
     @State private var showBreakStartPrompt = false
     @State private var showBreakEndedPrompt = false
     @State private var awaitingBreakChoice = false
@@ -90,6 +92,25 @@ struct LandingView: View {
         }
     }
 
+    private var currentStreakDays: Int {
+        let goal = max(goalDuration, 1)
+        let byDay = studySecondsByDay()
+        var streak = 0
+        var cursor = Calendar.current.startOfDay(for: Date())
+
+        while true {
+            let seconds = byDay[cursor, default: 0]
+            if seconds >= goal {
+                streak += 1
+                guard let previous = Calendar.current.date(byAdding: .day, value: -1, to: cursor) else { break }
+                cursor = previous
+            } else {
+                break
+            }
+        }
+        return streak
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -120,6 +141,22 @@ struct LandingView: View {
                             .clipShape(Capsule())
                         }
                         Spacer()
+
+                        NavigationLink {
+                            ProgressView()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "flame.fill")
+                                    .foregroundColor(.red)
+                                Text("\(currentStreakDays)")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Capsule())
+                        }
                     }
 
                     VStack(spacing: 14) {
@@ -269,6 +306,7 @@ struct LandingView: View {
                         stopAlarmAudio()
                         awaitingBreakEndAcknowledge = false
                         showBreakEndedPrompt = false
+                        pendingSessionsCount += 1
                         playMoodLoopIfNeeded()
                     },
                     secondaryAction: {}
@@ -308,6 +346,7 @@ struct LandingView: View {
             stopAlarmAudio()
             currentPhase = .study
             remainingPhaseSeconds = studyDurationSeconds
+            pendingSessionsCount += 1
             statusPrompt = ""
             focusState = .running
             playMoodLoopIfNeeded()
@@ -345,7 +384,7 @@ struct LandingView: View {
                 goalProgressSeconds += 1
                 pendingStudySeconds += 1
             } else if currentPhase == .break {
-                pendingBreakSeconds += 1
+            pendingBreakSeconds += 1
             }
         }
 
@@ -391,6 +430,7 @@ struct LandingView: View {
         awaitingBreakChoice = false
         currentPhase = .study
         remainingPhaseSeconds = studyDurationSeconds
+        pendingSessionsCount += 1
         statusPrompt = "Break skipped. Back to Focus."
         playMoodLoopIfNeeded()
     }
@@ -524,7 +564,7 @@ struct LandingView: View {
     }
 
     private func flushPendingDurations() {
-        guard pendingStudySeconds > 0 || pendingBreakSeconds > 0 else { return }
+        guard pendingStudySeconds > 0 || pendingBreakSeconds > 0 || pendingSessionsCount > 0 else { return }
         let dayStart = Calendar.current.startOfDay(for: Date())
         let predicate = #Predicate<DailyStudyRecord> { $0.date == dayStart }
         var descriptor = FetchDescriptor<DailyStudyRecord>(predicate: predicate)
@@ -534,21 +574,33 @@ struct LandingView: View {
             if let existing = try modelContext.fetch(descriptor).first {
                 existing.studySeconds += pendingStudySeconds
                 existing.breakSeconds += pendingBreakSeconds
+                existing.sessionsCount += pendingSessionsCount
             } else {
                 modelContext.insert(
                     DailyStudyRecord(
                         date: dayStart,
                         studySeconds: pendingStudySeconds,
-                        breakSeconds: pendingBreakSeconds
+                        breakSeconds: pendingBreakSeconds,
+                        sessionsCount: pendingSessionsCount
                     )
                 )
             }
             try modelContext.save()
             pendingStudySeconds = 0
             pendingBreakSeconds = 0
+            pendingSessionsCount = 0
         } catch {
             print("Save study record error: \(error.localizedDescription)")
         }
+    }
+
+    private func studySecondsByDay() -> [Date: Int] {
+        var result: [Date: Int] = [:]
+        for record in records {
+            let day = Calendar.current.startOfDay(for: record.date)
+            result[day, default: 0] += max(record.studySeconds, 0)
+        }
+        return result
     }
 
     private func moodFileName(for mood: Mood) -> String? {
