@@ -5,7 +5,7 @@ struct ActivityMonthSummary {
     let monthStart: Date
     let displayedDays: Int
     let daysInMonth: Int
-    let firstWeekday: Int
+    let leadingEmptySlots: Int
     let progressByDay: [Double]
     let targetReachedDays: Int
     let totalHours: Int
@@ -27,10 +27,13 @@ enum ActivitySummaryBuilder {
         for monthStart: Date,
         records: [DailyStudyRecord],
         dailyGoalSeconds: Int,
+        todayOverrideSeconds: Int? = nil,
+        todayOverrideDay: Int? = nil,
         calendar: Calendar = .current
     ) -> ActivityMonthSummary {
         let daysInMonth = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 30
         let firstWeekday = calendar.component(.weekday, from: monthStart)
+        let leadingEmptySlots = (firstWeekday - calendar.firstWeekday + 7) % 7
         let now = Date()
         let isCurrentMonth = calendar.isDate(monthStart, equalTo: now, toGranularity: .month)
         let displayedDays = isCurrentMonth ? calendar.component(.day, from: now) : daysInMonth
@@ -48,6 +51,10 @@ enum ActivitySummaryBuilder {
             secondsByDay[day, default: 0] += max(record.studySeconds, 0)
         }
 
+        if isCurrentMonth, let todayOverrideSeconds, let todayOverrideDay {
+            secondsByDay[todayOverrideDay] = max(secondsByDay[todayOverrideDay, default: 0], todayOverrideSeconds)
+        }
+
         let goal = max(dailyGoalSeconds, 1)
         let progresses: [Double] = (1...displayedDays).map { day in
             let seconds = secondsByDay[day, default: 0]
@@ -60,7 +67,7 @@ enum ActivitySummaryBuilder {
             monthStart: monthStart,
             displayedDays: displayedDays,
             daysInMonth: daysInMonth,
-            firstWeekday: firstWeekday,
+            leadingEmptySlots: leadingEmptySlots,
             progressByDay: progresses,
             targetReachedDays: progresses.filter { $0 >= 1.0 }.count,
             totalHours: Int((Double(totalSeconds) / 3600.0).rounded())

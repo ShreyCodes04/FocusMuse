@@ -1,18 +1,17 @@
 import SwiftUI
 import SwiftData
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 struct RecordsView: View {
     struct BadgeItem: Identifiable {
-        enum Art {
-            case streakOne
-            case streakTwo
-            case focusHours
-        }
-
         let id = UUID()
-        let title: String
         let message: String
-        let art: Art
+        let iconName: String
+        let achieved: Bool
     }
 
     private struct DayAggregate {
@@ -22,7 +21,9 @@ struct RecordsView: View {
 
     @Query(sort: [SortDescriptor(\DailyStudyRecord.date)]) private var records: [DailyStudyRecord]
 
-    private let dailyGoalSeconds: Int = 2 * 60 * 60
+    @AppStorage("daily_goal_duration_seconds") private var dailyGoalSeconds: Int = 2 * 60 * 60
+    @AppStorage("today_study_progress_seconds") private var todayStudyProgressSeconds: Int = 0
+    @AppStorage("today_study_progress_day_key") private var todayStudyProgressDayKey: String = ""
     private let calendar = Calendar.current
 
     @State private var selectedDate: Date = Calendar.current.startOfDay(for: Date())
@@ -62,7 +63,7 @@ struct RecordsView: View {
     }
 
     private var selectedStudySeconds: Int {
-        recordsByDay[calendar.startOfDay(for: selectedDate)]?.studySeconds ?? 0
+        effectiveStudySeconds(for: selectedDate)
     }
 
     private var selectedBreakSeconds: Int {
@@ -76,11 +77,63 @@ struct RecordsView: View {
     }
 
     private var badges: [BadgeItem] {
-        [
-            BadgeItem(title: "Starter Streak", message: "1 week streak", art: .streakOne),
-            BadgeItem(title: "Momentum Streak", message: "2 week streak", art: .streakTwo),
-            BadgeItem(title: "Deep Focus", message: "4 hours focused", art: .focusHours)
+        let streak = currentStreakDays
+        let focusSeconds = totalFocusedSeconds
+        return [
+            BadgeItem(
+                message: "1 week streak",
+                iconName: "medal1",
+                achieved: streak >= 7
+            ),
+            BadgeItem(
+                message: "1 month streak",
+                iconName: "medal2",
+                achieved: streak >= 30
+            ),
+            BadgeItem(
+                message: "6 months streak",
+                iconName: "medal3",
+                achieved: streak >= 180
+            ),
+            BadgeItem(
+                message: "Focussed for 1 hour",
+                iconName: "trophy1",
+                achieved: focusSeconds >= 1 * 3600
+            ),
+            BadgeItem(
+                message: "Focussed for 10 hours",
+                iconName: "trophy2",
+                achieved: focusSeconds >= 10 * 3600
+            ),
+            BadgeItem(
+                message: "Focussed for 24 hours",
+                iconName: "trophy3",
+                achieved: focusSeconds >= 24 * 3600
+            )
         ]
+    }
+
+    private var totalFocusedSeconds: Int {
+        recordsByDay.values.reduce(0) { $0 + max($1.studySeconds, 0) }
+    }
+
+    private var currentStreakDays: Int {
+        let goal = max(dailyGoalSeconds, 1)
+        let byDay = recordsByDay.mapValues { max($0.studySeconds, 0) }
+        var streak = 0
+        var cursor = today
+
+        while true {
+            let seconds = effectiveStudySeconds(for: cursor, recordsByDaySeconds: byDay)
+            if seconds >= goal {
+                streak += 1
+                guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+                cursor = previous
+            } else {
+                break
+            }
+        }
+        return streak
     }
 
     var body: some View {
@@ -235,9 +288,32 @@ struct RecordsView: View {
     private func progress(for date: Date) -> Double {
         let dayStart = calendar.startOfDay(for: date)
         guard dayStart <= today else { return 0 }
-        let seconds = recordsByDay[dayStart]?.studySeconds ?? 0
+        let seconds = effectiveStudySeconds(for: dayStart)
         let goal = max(dailyGoalSeconds, 1)
         return min(max(Double(seconds) / Double(goal), 0.0), 1.0)
+    }
+
+    private func effectiveStudySeconds(for date: Date) -> Int {
+        let base = recordsByDay.mapValues { max($0.studySeconds, 0) }
+        return effectiveStudySeconds(for: date, recordsByDaySeconds: base)
+    }
+
+    private func effectiveStudySeconds(for date: Date, recordsByDaySeconds: [Date: Int]) -> Int {
+        let dayStart = calendar.startOfDay(for: date)
+        let persisted = recordsByDaySeconds[dayStart] ?? 0
+        guard calendar.isDate(dayStart, inSameDayAs: today),
+              todayStudyProgressDayKey == dayKey(for: today) else {
+            return persisted
+        }
+        return max(persisted, todayStudyProgressSeconds)
+    }
+
+    private func dayKey(for date: Date) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        let year = parts.year ?? 0
+        let month = parts.month ?? 0
+        let day = parts.day ?? 0
+        return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
     private func dayLetter(for date: Date) -> String {
@@ -276,14 +352,9 @@ private struct BadgeFlipCard: View {
     }
 
     private var front: some View {
-        VStack(spacing: 10) {
-            BadgeArtView(art: badge.art)
-                .frame(width: 92, height: 92)
-
-            Text(badge.title)
-                .font(.subheadline.bold())
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
+        VStack(spacing: 12) {
+            BadgeArtView(iconName: badge.iconName, achieved: badge.achieved)
+                .frame(width: 110, height: 110)
 
             Text("Tap to flip")
                 .font(.caption)
@@ -291,19 +362,18 @@ private struct BadgeFlipCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.white.opacity(0.1))
+        .background(Color.red.opacity(0.18))
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                .stroke(Color.red.opacity(0.45), lineWidth: 1)
         )
     }
 
     private var back: some View {
         VStack(spacing: 10) {
-            Image(systemName: "sparkles")
-                .font(.title2.weight(.bold))
-                .foregroundColor(.red.opacity(0.9))
+            BadgeArtView(iconName: badge.iconName, achieved: badge.achieved)
+                .frame(width: 54, height: 54)
 
             Text(badge.message)
                 .font(.headline.weight(.semibold))
@@ -322,56 +392,51 @@ private struct BadgeFlipCard: View {
 }
 
 private struct BadgeArtView: View {
-    let art: RecordsView.BadgeItem.Art
+    let iconName: String
+    let achieved: Bool
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.red.opacity(0.9), Color.white.opacity(0.7)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-
-            switch art {
-            case .streakOne:
-                ZStack {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 34, weight: .bold))
-                        .foregroundColor(.white.opacity(0.95))
-                    Circle()
-                        .stroke(Color.white.opacity(0.35), lineWidth: 2)
-                        .frame(width: 64, height: 64)
-                }
-            case .streakTwo:
-                ZStack {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 34, weight: .bold))
-                        .foregroundColor(.white.opacity(0.95))
-                    Path { path in
-                        path.move(to: CGPoint(x: 18, y: 72))
-                        path.addLine(to: CGPoint(x: 34, y: 58))
-                        path.addLine(to: CGPoint(x: 52, y: 66))
-                        path.addLine(to: CGPoint(x: 72, y: 48))
-                    }
-                    .stroke(Color.white.opacity(0.45), style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
-                }
-            case .focusHours:
-                ZStack {
-                    Circle()
-                        .stroke(Color.white.opacity(0.75), lineWidth: 4)
-                        .frame(width: 54, height: 54)
-                    Path { path in
-                        path.move(to: CGPoint(x: 46, y: 46))
-                        path.addLine(to: CGPoint(x: 46, y: 30))
-                        path.move(to: CGPoint(x: 46, y: 46))
-                        path.addLine(to: CGPoint(x: 58, y: 52))
-                    }
-                    .stroke(Color.white.opacity(0.95), style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                }
+        Group {
+            if let image = platformImage(named: iconName) {
+                #if os(iOS)
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                #elseif os(macOS)
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                #endif
+            } else {
+                Image(systemName: achieved ? "medal.fill" : "questionmark.circle")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundColor(.white.opacity(0.9))
+                    .padding(14)
             }
         }
     }
+
+    #if os(iOS)
+    private func platformImage(named name: String) -> UIImage? {
+        for ext in ["png", "jpeg", "jpg"] {
+            if let url = Bundle.main.url(forResource: name, withExtension: ext),
+               let data = try? Data(contentsOf: url),
+               let image = UIImage(data: data) {
+                return image
+            }
+        }
+        return UIImage(named: name)
+    }
+    #elseif os(macOS)
+    private func platformImage(named name: String) -> NSImage? {
+        for ext in ["png", "jpeg", "jpg"] {
+            if let url = Bundle.main.url(forResource: name, withExtension: ext),
+               let image = NSImage(contentsOf: url) {
+                return image
+            }
+        }
+        return NSImage(named: name)
+    }
+    #endif
 }

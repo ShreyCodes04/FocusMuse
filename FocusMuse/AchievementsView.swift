@@ -14,6 +14,8 @@ struct AchievementsView: View {
             .ignoresSafeArea()
         }
         .navigationTitle("Achievements")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 }

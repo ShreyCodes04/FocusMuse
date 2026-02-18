@@ -4,6 +4,8 @@ import SwiftData
 struct ProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("profile_name") private var profileName: String = "sadhukhanbidhan"
+    @AppStorage("today_study_progress_seconds") private var todayStudyProgressSeconds: Int = 0
+    @AppStorage("today_study_progress_day_key") private var todayStudyProgressDayKey: String = ""
     @State private var showNameEditor = false
     @State private var draftName = ""
 
@@ -11,7 +13,10 @@ struct ProfileView: View {
     private let calendar = Calendar.current
 
     private var currentWeekInterval: DateInterval {
-        calendar.dateInterval(of: .weekOfYear, for: Date()) ?? DateInterval(start: Date(), duration: 0)
+        let todayStart = calendar.startOfDay(for: Date())
+        let start = calendar.date(byAdding: .day, value: -6, to: todayStart) ?? todayStart
+        let end = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
+        return DateInterval(start: start, end: end)
     }
 
     private var previousWeekInterval: DateInterval {
@@ -23,11 +28,11 @@ struct ProfileView: View {
     }
 
     private var weeklyFocusSeconds: Int {
-        totalStudySeconds(in: currentWeekInterval)
+        effectiveTotalStudySeconds(in: currentWeekInterval)
     }
 
     private var previousWeeklyFocusSeconds: Int {
-        totalStudySeconds(in: previousWeekInterval)
+        effectiveTotalStudySeconds(in: previousWeekInterval)
     }
 
     private var averageDailyFocusSeconds: Int {
@@ -155,9 +160,7 @@ struct ProfileView: View {
                                     .font(.system(size: 30, weight: .semibold, design: .rounded))
                                     .foregroundColor(.white)
 
-                                Text(deltaText(current: weeklyFocusSeconds, previous: previousWeeklyFocusSeconds))
-                                    .font(.caption.weight(.medium))
-                                    .foregroundColor(.white.opacity(0.7))
+                                deltaRow(current: weeklyFocusSeconds, previous: previousWeeklyFocusSeconds)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -179,9 +182,7 @@ struct ProfileView: View {
                                     .font(.system(size: 30, weight: .semibold, design: .rounded))
                                     .foregroundColor(.white)
 
-                                Text(deltaText(current: averageDailyFocusSeconds, previous: previousAverageDailyFocusSeconds))
-                                    .font(.caption.weight(.medium))
-                                    .foregroundColor(.white.opacity(0.7))
+                                deltaRow(current: averageDailyFocusSeconds, previous: previousAverageDailyFocusSeconds)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -217,23 +218,27 @@ struct ProfileView: View {
                             .foregroundColor(.white)
 
                         TextField("Enter name", text: $draftName)
+                            #if os(iOS)
                             .textInputAutocapitalization(.words)
+                            #endif
                             .autocorrectionDisabled()
                             .padding(12)
-                            .foregroundColor(.white)
+                            .foregroundColor(Color.white)
                             .background(Color.white.opacity(0.1))
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                     .padding(20)
                 }
                 .navigationTitle("Edit Name")
+                #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
+                #endif
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") {
                             showNameEditor = false
                         }
-                        .foregroundColor(.white)
+                        .foregroundColor(Color.white)
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
@@ -243,7 +248,7 @@ struct ProfileView: View {
                             }
                             showNameEditor = false
                         }
-                        .foregroundColor(.red)
+                        .foregroundColor(Color.red)
                     }
                 }
             }
@@ -259,6 +264,33 @@ struct ProfileView: View {
         }
     }
 
+    private func effectiveTotalStudySeconds(in interval: DateInterval) -> Int {
+        let base = totalStudySeconds(in: interval)
+        let today = calendar.startOfDay(for: Date())
+        guard interval.contains(today),
+              todayStudyProgressDayKey == dayKey(for: today) else {
+            return base
+        }
+
+        let persistedToday = records.reduce(0) { partial, record in
+            if calendar.isDate(record.date, inSameDayAs: today) {
+                return partial + max(record.studySeconds, 0)
+            }
+            return partial
+        }
+
+        let delta = max(todayStudyProgressSeconds - persistedToday, 0)
+        return base + delta
+    }
+
+    private func dayKey(for date: Date) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        let year = parts.year ?? 0
+        let month = parts.month ?? 0
+        let day = parts.day ?? 0
+        return String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
     private func formatDuration(_ seconds: Int) -> String {
         let hrs = seconds / 3600
         let mins = (seconds % 3600) / 60
@@ -268,7 +300,18 @@ struct ProfileView: View {
 
     private func deltaText(current: Int, previous: Int) -> String {
         let diff = abs(current - previous)
-        let prefix = current >= previous ? "▲" : "▼"
-        return "\(prefix) \(formatDuration(diff))"
+        return formatDuration(diff)
+    }
+
+    @ViewBuilder
+    private func deltaRow(current: Int, previous: Int) -> some View {
+        let isUp = current >= previous
+        HStack(spacing: 4) {
+            Image(systemName: isUp ? "arrow.up" : "arrow.down")
+                .font(.caption.weight(.bold))
+            Text(deltaText(current: current, previous: previous))
+                .font(.caption.weight(.medium))
+        }
+        .foregroundColor(isUp ? Color.green : Color.red)
     }
 }

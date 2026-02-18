@@ -3,8 +3,6 @@ import SwiftUI
 struct SplashScreenView: View {
     var body: some View {
         ZStack {
-            
-            // Dark Gradient Background
             LinearGradient(
                 gradient: Gradient(colors: [
                     Color.black,
@@ -14,19 +12,15 @@ struct SplashScreenView: View {
                 endPoint: .bottom
             )
             .ignoresSafeArea()
-            
-            VStack(spacing: 20) {
-                
-                // Sand Clock Icon
-                Image(systemName: "hourglass")
+
+            VStack(spacing: 14) {
+                Image("HourGlass")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 100, height: 100)
-                    .foregroundColor(.red)
-                
-                // App Name
+                    .frame(width: 112, height: 112)
+
                 Text("FocusMuse")
-                    .font(.system(size: 40, weight: .bold))
+                    .font(.system(size: 36, weight: .bold))
                     .foregroundColor(.white)
             }
         }
@@ -38,4 +32,3 @@ struct SplashScreenView: View {
 //
 //  Created by Shreyan Sadhukhan on 12/02/26.
 //
-

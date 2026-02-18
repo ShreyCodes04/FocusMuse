@@ -92,6 +92,8 @@ struct SetGoalView: View {
             .padding(20)
         }
         .navigationTitle("Set Goal")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 }

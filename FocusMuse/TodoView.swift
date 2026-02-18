@@ -21,6 +21,7 @@ struct TodoView: View {
     let onBack: () -> Void
 
     @AppStorage("todo_tasks_v2") private var tasksData = Data()
+    @AppStorage("todo_completed_total_count") private var todoCompletedTotalCount: Int = 0
 
     @State private var inputText = ""
     @State private var tasks: [Task] = []
@@ -166,7 +167,11 @@ struct TodoView: View {
 
     private func toggleTask(_ task: Task) {
         guard let index = tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        let wasCompleted = tasks[index].isCompleted
         tasks[index].isCompleted.toggle()
+        if !wasCompleted && tasks[index].isCompleted {
+            todoCompletedTotalCount += 1
+        }
         saveTasks()
     }
 

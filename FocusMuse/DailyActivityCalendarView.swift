@@ -3,6 +3,8 @@ import SwiftData
 
 struct DailyActivityCalendarView: View {
     @Query(sort: [SortDescriptor(\DailyStudyRecord.date, order: .reverse)]) private var records: [DailyStudyRecord]
+    @AppStorage("today_study_progress_seconds") private var todayStudyProgressSeconds: Int = 0
+    @AppStorage("today_study_progress_day_key") private var todayStudyProgressDayKey: String = ""
 
     let dailyGoalSeconds: Int
     private let calendar = Calendar.current
@@ -34,6 +36,8 @@ struct DailyActivityCalendarView: View {
                             for: month,
                             records: records,
                             dailyGoalSeconds: dailyGoalSeconds,
+                            todayOverrideSeconds: todayProgressOverrideForCurrentDay,
+                            todayOverrideDay: todayDayComponent,
                             calendar: calendar
                         )
                         monthSection(summary: summary)
@@ -44,7 +48,26 @@ struct DailyActivityCalendarView: View {
             }
         }
         .navigationTitle("Calendar")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
+    }
+
+    private var todayProgressOverrideForCurrentDay: Int? {
+        guard todayStudyProgressDayKey == dayKey(for: Date()) else { return nil }
+        return todayStudyProgressSeconds
+    }
+
+    private var todayDayComponent: Int? {
+        calendar.component(.day, from: Date())
+    }
+
+    private func dayKey(for date: Date) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        let year = parts.year ?? 0
+        let month = parts.month ?? 0
+        let day = parts.day ?? 0
+        return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
     @ViewBuilder
@@ -63,11 +86,6 @@ struct DailyActivityCalendarView: View {
                 .foregroundColor(.white.opacity(0.92))
 
             LazyVGrid(columns: gridItems, spacing: 12) {
-                ForEach(0..<(summary.firstWeekday - 1), id: \.self) { _ in
-                    Color.clear
-                        .frame(height: 56)
-                }
-
                 ForEach(1...summary.displayedDays, id: \.self) { day in
                     ActivityDayRing(day: day, progress: summary.progressByDay[day - 1])
                 }

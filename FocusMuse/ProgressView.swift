@@ -18,7 +18,15 @@ struct ProgressView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: [SortDescriptor(\DailyStudyRecord.date)]) private var records: [DailyStudyRecord]
     @AppStorage("todo_tasks_v2") private var tasksData = Data()
+    @AppStorage("todo_completed_total_count") private var todoCompletedTotalCount: Int = 0
     @AppStorage("daily_goal_duration_seconds") private var goalDuration: Int = 2 * 60 * 60
+    @AppStorage("today_study_progress_seconds") private var todayStudyProgressSeconds: Int = 0
+    @AppStorage("today_study_progress_day_key") private var todayStudyProgressDayKey: String = ""
+    @AppStorage("today_break_progress_seconds") private var todayBreakProgressSeconds: Int = 0
+    @AppStorage("today_break_progress_day_key") private var todayBreakProgressDayKey: String = ""
+    @AppStorage("pomodoro_sessions_total_count") private var pomodoroSessionsTotalCount: Int = 0
+    @AppStorage("focus_live_total_seconds") private var focusLiveTotalSeconds: Int = 0
+    @AppStorage("break_live_total_seconds") private var breakLiveTotalSeconds: Int = 0
 
     private let recentProductivity: [ProductivityPoint] = [
         ProductivityPoint(dayLabel: "Mon", minutes: 557),
@@ -31,19 +39,30 @@ struct ProgressView: View {
     ]
 
     private var focusSecondsTotal: Int {
-        records.reduce(0) { $0 + max($1.studySeconds, 0) }
+        let persisted = records.reduce(0) { $0 + max($1.studySeconds, 0) }
+        let todayPersisted = records
+            .filter { Calendar.current.isDate($0.date, inSameDayAs: Date()) }
+            .reduce(0) { $0 + max($1.studySeconds, 0) }
+        let todayDelta = max(todayStudySnapshot - todayPersisted, 0)
+        return max(persisted + todayDelta, focusLiveTotalSeconds)
     }
 
     private var breakSecondsTotal: Int {
-        records.reduce(0) { $0 + max($1.breakSeconds, 0) }
+        let persisted = records.reduce(0) { $0 + max($1.breakSeconds, 0) }
+        let todayPersisted = records
+            .filter { Calendar.current.isDate($0.date, inSameDayAs: Date()) }
+            .reduce(0) { $0 + max($1.breakSeconds, 0) }
+        let todayDelta = max(todayBreakSnapshot - todayPersisted, 0)
+        return max(persisted + todayDelta, breakLiveTotalSeconds)
     }
 
     private var sessionsTotal: Int {
-        records.reduce(0) { $0 + max($1.sessionsCount, 0) }
+        let persisted = records.reduce(0) { $0 + max($1.sessionsCount, 0) }
+        return max(persisted, pomodoroSessionsTotalCount)
     }
 
     private var tasksCompletedTotal: Int {
-        decodeTodoTasks().filter(\.isCompleted).count
+        max(todoCompletedTotalCount, decodeTodoTasks().filter(\.isCompleted).count)
     }
 
     private var streakDays: Int {
@@ -56,12 +75,22 @@ struct ProgressView: View {
 
         var streak = 0
         var cursor = Calendar.current.startOfDay(for: Date())
-        while byDay[cursor, default: 0] >= goal {
+        while effectiveStudySeconds(for: cursor, byDay: byDay) >= goal {
             streak += 1
             guard let previous = Calendar.current.date(byAdding: .day, value: -1, to: cursor) else { break }
             cursor = previous
         }
         return streak
+    }
+
+    private var todayStudySnapshot: Int {
+        guard todayStudyProgressDayKey == dayKey(for: Date()) else { return 0 }
+        return todayStudyProgressSeconds
+    }
+
+    private var todayBreakSnapshot: Int {
+        guard todayBreakProgressDayKey == dayKey(for: Date()) else { return 0 }
+        return todayBreakProgressSeconds
     }
 
     var body: some View {
@@ -199,6 +228,21 @@ struct ProgressView: View {
         } catch {
             return []
         }
+    }
+
+    private func effectiveStudySeconds(for date: Date, byDay: [Date: Int]) -> Int {
+        let day = Calendar.current.startOfDay(for: date)
+        let persisted = byDay[day, default: 0]
+        guard Calendar.current.isDate(day, inSameDayAs: Date()) else { return persisted }
+        return max(persisted, todayStudySnapshot)
+    }
+
+    private func dayKey(for date: Date) -> String {
+        let parts = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        let year = parts.year ?? 0
+        let month = parts.month ?? 0
+        let day = parts.day ?? 0
+        return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
     private func formatHoursMinutes(_ totalSeconds: Int) -> String {
