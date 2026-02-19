@@ -333,6 +333,14 @@ private struct BadgeFlipCard: View {
     let badge: RecordsView.BadgeItem
     @State private var isFlipped = false
 
+    private var cardFillColor: Color {
+        badge.achieved ? Color.red.opacity(0.22) : Color.gray.opacity(0.28)
+    }
+
+    private var cardStrokeColor: Color {
+        badge.achieved ? Color.red.opacity(0.45) : Color.white.opacity(0.28)
+    }
+
     var body: some View {
         ZStack {
             front
@@ -362,11 +370,11 @@ private struct BadgeFlipCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.red.opacity(0.18))
+        .background(cardFillColor)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.red.opacity(0.45), lineWidth: 1)
+                .stroke(cardStrokeColor, lineWidth: 1)
         )
     }
 
@@ -382,11 +390,11 @@ private struct BadgeFlipCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.red.opacity(0.22))
+        .background(cardFillColor)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.red.opacity(0.45), lineWidth: 1)
+                .stroke(cardStrokeColor, lineWidth: 1)
         )
     }
 }

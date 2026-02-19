@@ -312,17 +312,22 @@ struct LandingView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
 
-                    if !statusPrompt.isEmpty {
-                        Text(statusPrompt)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(Color.white.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    NavigationLink {
+                        StudyPlannerView()
+                    } label: {
+                        StudyPlannerCard()
                     }
+                    .buttonStyle(StudyPlannerPressStyle())
+
+                    NavigationLink {
+                        MindfulnessLandingView()
+                    } label: {
+                        MindfulnessCard()
+                    }
+                    .buttonStyle(StudyPlannerPressStyle())
                 }
                 .padding(20)
+                .padding(.bottom, 96)
             }
 
             if showGoalCelebration {
@@ -886,6 +891,131 @@ struct LandingView: View {
         let seconds = totalSeconds % 60
 
         return String(format: "%02dh %02dm %02ds", hours, minutes, seconds)
+    }
+}
+
+private struct StudyPlannerCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.12))
+
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 24, weight: .semibold))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(Color.white, Color.red.opacity(0.9))
+            }
+            .frame(width: 56, height: 56)
+
+            Text("Study Planner")
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+
+            Text("Plan subjects, manage deadlines, and organize your study schedule.")
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(.white.opacity(0.7))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color.black.opacity(0.34))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.3), Color.white.opacity(0.08)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.1
+                )
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.red.opacity(0.2), Color.clear, Color.black.opacity(0.35)],
+                        startPoint: .bottomLeading,
+                        endPoint: .topTrailing
+                    ),
+                    lineWidth: 1.0
+                )
+        }
+        .shadow(color: Color.red.opacity(0.24), radius: 24, x: 0, y: 16)
+        .shadow(color: Color.black.opacity(0.42), radius: 12, x: 0, y: 8)
+        .accessibilityLabel("Study Planner")
+    }
+}
+
+private struct MindfulnessCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.12))
+
+                Image(systemName: "brain.head.profile")
+                    .font(.system(size: 24, weight: .semibold))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(Color.white, Color.red.opacity(0.9))
+            }
+            .frame(width: 56, height: 56)
+
+            Text("Mindfulness")
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+
+            Text("Small steps towards your better mental health.")
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(.white.opacity(0.7))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color.black.opacity(0.34))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.3), Color.white.opacity(0.08)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.1
+                )
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.red.opacity(0.2), Color.clear, Color.black.opacity(0.35)],
+                        startPoint: .bottomLeading,
+                        endPoint: .topTrailing
+                    ),
+                    lineWidth: 1.0
+                )
+        }
+        .shadow(color: Color.red.opacity(0.24), radius: 24, x: 0, y: 16)
+        .shadow(color: Color.black.opacity(0.42), radius: 12, x: 0, y: 8)
+        .accessibilityLabel("Mindfulness")
+    }
+}
+
+private struct StudyPlannerPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.975 : 1.0)
+            .brightness(configuration.isPressed ? -0.015 : 0)
+            .animation(.easeOut(duration: 0.18), value: configuration.isPressed)
     }
 }
 
